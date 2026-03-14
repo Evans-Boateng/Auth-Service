@@ -6,7 +6,4 @@ engine = create_engine(sql_url)
 
 def create_db_and_tables():
   SQLModel.metadata.create_all(engine)
-
-class User(SQLModel, table=True):
-  id: int = Field(unique=True, primary_key=True)
-  name: str 
+ 
