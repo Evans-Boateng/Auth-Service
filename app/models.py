@@ -4,7 +4,7 @@ import uuid
 
 
 class UserBase(SQLModel):
-  username: str = Field(unique=True)
+  username: str = Field(index=True, unique=True)
   email: EmailStr = Field(index=True, unique=True)
   full_name: str
 
