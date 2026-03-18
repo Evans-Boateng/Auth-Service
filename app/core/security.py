@@ -1,14 +1,17 @@
 from pwdlib import PasswordHash
 from fastapi import HTTPException
 from sqlmodel import select
-from datetime import datetime
+from datetime import datetime, timedelta
 from ..models import User
 import os
+import jwt
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DUMMY_HASH = os.getenv("DUMMY_HASH")
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("JWT_ALGORITHM")
 
 
 password_hash = PasswordHash.recommended()
@@ -36,9 +39,24 @@ def authenticate_user(username: str, password: str, session):
         return False
     return user
 
-# def create_token(data: dict, expires_delta: datetime, type: str):
-#     to_encode = data.copy()
+def create_token(data: dict, expires_delta: datetime | None, type: str):
+    to_encode = data.copy()
     
-#     if expires_delta: 
-#         expire = 2
-    
+    if expires_delta: 
+        expire = datetime.now() + expires_delta
+    elif type == "access":
+        expire = datetime.now + timedelta(minutes=7)
+    elif type == "refresh":
+        expire = datetime.now + timedelta(days=7)
+
+    #here I'm adding expiration claim to the payload
+    to_encode.update({"exp": expire})
+
+    #encode and sign the token here
+    encoded_jwt = jwt.encode(
+        to_encode,
+        SECRET_KEY,
+        ALGORITHM
+    )
+    return encoded_jwt
+     
