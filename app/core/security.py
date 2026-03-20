@@ -6,12 +6,16 @@ from ..models import User
 import os
 import jwt
 from dotenv import load_dotenv
+import hashlib
+import base64
 
 load_dotenv()
 
 DUMMY_HASH = os.getenv("DUMMY_HASH")
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("JWT_ALGORITHM")
+encoded_key = os.getenv("PRIVATE_KEY_B64")
+PRIVATE_KEY = base64.b64decode(encoded_key)
 
 
 password_hash = PasswordHash.recommended()
@@ -23,12 +27,20 @@ def harsh_password(password):
 def verify_password(plain_password, hashed_password):
     return password_hash.verify(plain_password, hashed_password)
 
+def hash_token(token:str):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 def get_user(username, session):
     statement = select(User).where(User.username == username)
     user = session.exec(statement).first()
     return user
 
 def authenticate_user(username: str, password: str, session):
+    """
+    This function authenticates the user by making sure the response time is the same
+    whether user is valid or not and thus to prevent timing attacks
+    """
     user = get_user(username, session)
     if not user:
        #here, were making sure that the endpoint takes the same time to respond, whether the user is valid or not
@@ -53,9 +65,10 @@ def create_token(data: dict, expires_delta: datetime | None, type: str):
     to_encode.update({"exp": expire})
 
     #encode and sign the token here
+    #I used RS256 because this is a distributed service
     encoded_jwt = jwt.encode(
         to_encode,
-        SECRET_KEY,
+        PRIVATE_KEY,
         ALGORITHM
     )
     return encoded_jwt

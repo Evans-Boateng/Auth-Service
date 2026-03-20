@@ -1,13 +1,16 @@
-from fastapi import FastAPI, Depends, Form, status
+from fastapi import FastAPI, Depends, Form, status, APIRouter
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.exceptions import HTTPException
+from fastapi.responses import Response
 from sqlmodel import Session, select
 from typing import Annotated
 from .database import create_db_and_tables
 from .dependencies import get_session
-from .models import User, UserCreate
-from .core.security import harsh_password
+from .models import User, UserCreate, Token, RefreshToken
+from .core.security import harsh_password, authenticate_user, create_token, hash_token
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
+import hashlib
 
 
 
@@ -18,16 +21,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+router = APIRouter(prefix="/auth")
+
 SessionDp = Annotated[Session, Depends(get_session)]
 
 
 
 #testing
-@app.get("/test", status_code=200)
+@router.get("/test", status_code=200)
 async def test():
   return {"message": "success"}
 
-@app.post("/register", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/register", status_code=status.HTTP_204_NO_CONTENT)
 async def create_user(data: Annotated[UserCreate, Form()], session: SessionDp):
   credentails_exception = HTTPException(
     status_code = status.HTTP_400_BAD_REQUEST,
@@ -54,10 +59,61 @@ async def create_user(data: Annotated[UserCreate, Form()], session: SessionDp):
   session.commit()
   session.refresh(user)
 
+@router.post("/token", response_model=Token)
+async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDp, response: Response):
+  credentials_exception = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Invalid username or password"
+  )
+  user = authenticate_user(username=form_data.username, password=form_data.password, session=session)
+  if not user: 
+    raise credentials_exception
+  
+  access_token_expiry = timedelta(minutes=7)
+  refresh_token_expiry = timedelta(days=7)
 
+  access_token = create_token(
+    data={
+      "sub": str(user.id),
+      "username": user.username,
+      "email": user.email,
+      "type": "access"
+    },
+    expires_delta=access_token_expiry,
+    type="access"
+  )
+  refresh_token = create_token(
+    data={
+      "sub": str(user.id),
+      "type": "refresh"
+    },
+    expires_delta=refresh_token_expiry,
+    type="refresh"
+  )
+  
+  refresh_token_in_db = RefreshToken(
+    hashed_token=hash_token(refresh_token),
+    user_id=user.id,
+    expires_at = datetime.now() + refresh_token_expiry
+  )
+
+  session.add(refresh_token_in_db)
+  session.commit()
+  token = Token(access_token=access_token, token_type="Bearer")
+  response.set_cookie(
+    key="refresh_token",
+    value=refresh_token,
+    expires=datetime.now(timezone.utc) + refresh_token_expiry,
+    httponly=True,
+    secure=True,
+    samesite="none"
+  )
+
+  return token
 
 # @app.get("/user")
 # async def get_user(session: SessionDp, user: User):
 #   statement = select(User).where(user.username) == "Anelka"
 #   user_in_db = session.exec(statement)
 #   return user_in_db
+app.include_router(router)
