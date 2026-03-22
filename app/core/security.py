@@ -16,6 +16,8 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("JWT_ALGORITHM")
 encoded_key = os.getenv("PRIVATE_KEY_B64")
 PRIVATE_KEY = base64.b64decode(encoded_key)
+encoded_public_key = os.getenv("PUBLIC_KEY_B64")
+PUBLIC_KEY = base64.b64decode(encoded_public_key)
 
 
 password_hash = PasswordHash.recommended()
@@ -57,9 +59,9 @@ def create_token(data: dict, expires_delta: datetime | None, type: str):
     if expires_delta: 
         expire = datetime.now() + expires_delta
     elif type == "access":
-        expire = datetime.now + timedelta(minutes=7)
+        expire = datetime.now() + timedelta(minutes=7)
     elif type == "refresh":
-        expire = datetime.now + timedelta(days=7)
+        expire = datetime.now() + timedelta(days=7)
 
     #here I'm adding expiration claim to the payload
     to_encode.update({"exp": expire})
@@ -72,4 +74,7 @@ def create_token(data: dict, expires_delta: datetime | None, type: str):
         ALGORITHM
     )
     return encoded_jwt
+
+def verify_token(token: str):
+    return jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
      
