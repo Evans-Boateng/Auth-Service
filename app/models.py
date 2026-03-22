@@ -10,7 +10,7 @@ class RefreshToken(SQLModel, table=True):
   user: "User" = Relationship(back_populates="refresh_tokens")
   user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
   expires_at: datetime
-  isRevoked: bool = False
+  is_revoked: bool = False
   
 
 class UserBase(SQLModel):
@@ -33,6 +33,8 @@ class Token(BaseModel):
   access_token: str
   refresh_token: str | None = None
   token_type: str
+  access_token_exiry: datetime
+  refresh_token_expiry: datetime
 
 class Refresh_Token(BaseModel):
   refresh_token: str
