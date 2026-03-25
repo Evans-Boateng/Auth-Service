@@ -15,12 +15,12 @@ from jwt import InvalidTokenError
 
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-  create_db_and_tables() # this runs before the application starts
-  yield
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#   create_db_and_tables() # this runs before the application starts
+#   yield
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 router = APIRouter(prefix="/auth")
 
