@@ -4,3 +4,7 @@ env/
 
 
 .vscode/*
+
+#standard python ignores
+__pycache__
+*.py[cod]

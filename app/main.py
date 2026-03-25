@@ -113,7 +113,7 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], sess
   return token
 
 @router.post("/token/refresh/", response_model=Token)
-async def refresh_token(request_data: Annotated[Refresh_Token, Cookie()], session: SessionDp, response: Response):
+async def refresh_token(request_data: Refresh_Token, session: SessionDp, response: Response):
   credentials_exception = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN,
     detail="Could not validate credentials"
