@@ -8,6 +8,8 @@ import jwt
 from dotenv import load_dotenv
 import hashlib
 import base64
+from fastapi_limiter.depends import RateLimiter
+from pyrate_limiter import Limiter, Rate
 
 load_dotenv()
 
@@ -77,4 +79,7 @@ def create_token(data: dict, expires_delta: datetime | None, type: str):
 
 def verify_token(token: str):
     return jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
+
+def check_limit(rate: Rate):
+  return RateLimiter(limiter=Limiter(rate))
      
