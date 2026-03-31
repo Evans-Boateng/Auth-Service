@@ -7,17 +7,18 @@ from typing import Annotated
 from .database import create_db_and_tables
 from .dependencies import get_session
 from .models import User, UserCreate, Token, RefreshToken, Refresh_Token
-from .core.security import harsh_password, authenticate_user, create_token, hash_token, verify_token
+from .core.security import harsh_password, authenticate_user, create_token, hash_token, verify_token, check_limit
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
 from jwt import InvalidTokenError
+from pyrate_limiter import Rate, Duration
 
 
 
 # @asynccontextmanager
 # async def lifespan(app: FastAPI):
-#   create_db_and_tables() # this runs before the application starts
+#   redis = await aioredis.from_url("redis://localhost:6379") # this runs before the application starts
 #   yield
 
 app = FastAPI()
@@ -25,6 +26,8 @@ app = FastAPI()
 router = APIRouter(prefix="/auth")
 
 SessionDp = Annotated[Session, Depends(get_session)]
+
+# Rate(2, Duration.SECOND * 5)
 
 
 
@@ -60,7 +63,7 @@ async def create_user(data: Annotated[UserCreate, Form()], session: SessionDp):
   session.commit()
   session.refresh(user)
 
-@router.post("/token", response_model=Token)
+@router.post("/token", response_model=Token, dependencies=[Depends(check_limit(Rate(5, Duration.MINUTE * 15)))])
 async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDp, response: Response):
   credentials_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -101,18 +104,9 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], sess
   session.add(refresh_token_in_db)
   session.commit()
   token = Token(access_token=access_token, refresh_token=refresh_token, token_type="Bearer", access_token_exiry=datetime.now() + access_token_expiry, refresh_token_expiry=datetime.now() + refresh_token_expiry)
-  # response.set_cookie(
-  #   key="refresh_token",
-  #   value=refresh_token,
-  #   expires=datetime.now(timezone.utc) + refresh_token_expiry,
-  #   httponly=True,
-  #   secure=True,
-  #   samesite="none"
-  # )
-
   return token
 
-@router.post("/token/refresh/", response_model=Token)
+@router.post("/token/refresh/", response_model=Token, dependencies=[Depends(check_limit(Rate(20, Duration.HOUR * 1)))])
 async def refresh_token(request_data: Refresh_Token, session: SessionDp, response: Response):
   credentials_exception = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN,
@@ -169,20 +163,34 @@ async def refresh_token(request_data: Refresh_Token, session: SessionDp, respons
   session.commit()
 
   token = Token(access_token=new_access_token, refresh_token=new_refresh_token, access_token_exiry= datetime.now() + access_token_expiry, refresh_token_expiry=datetime.now() + refresh_token_expiry, token_type="Bearer") 
-  # response.set_cookie(
-  #   key="refresh_token",
-  #   value=new_refresh_token,
-  #   expires=datetime.now(timezone.utc) + refresh_token_expiry,
-  #   httponly=True,
-  #   secure=True,
-  #   samesite="none"
-  # )
 
   return token
 
-# @app.get("/user")
-# async def get_user(session: SessionDp, user: User):
-#   statement = select(User).where(user.username) == "Anelka"
-#   user_in_db = session.exec(statement)
-#   return user_in_db
+@router.post("/logout/", dependencies=[Depends(check_limit(Rate(5, Duration.MINUTE * 15)))])
+async def logout(request_data: Refresh_Token, session: SessionDp):
+  access_exception = HTTPException(
+    status_code=401,
+    detail = "Access denied"
+  )
+
+  try:
+    payload = verify_token(request_data.refresh_token)
+    if payload.get("type") != "refresh":
+      raise access_exception
+  except InvalidTokenError:
+    access_exception
+  
+  refresh_in_db = session.exec(
+    select(RefreshToken).where(RefreshToken.hashed_token == hash_token(request_data.refresh_token))
+  ).first()
+  if not refresh_in_db or refresh_in_db.is_revoked:
+    raise access_exception
+  
+  #revoke the token and commit to database
+  refresh_in_db.is_revoked = True
+  session.add(refresh_in_db)
+  session.commit()
+
+  return "User logged out successfully"
+
 app.include_router(router)
