@@ -2,17 +2,18 @@ from fastapi import FastAPI, Depends, Form, status, APIRouter, Cookie
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.exceptions import HTTPException
 from fastapi.responses import Response
-from sqlmodel import Session, select
+from sqlmodel import Session, select, delete
 from typing import Annotated
 from .database import create_db_and_tables
 from .dependencies import get_session
-from .models import User, UserCreate, Token, RefreshToken, Refresh_Token
+from .models import User, UserCreate, Token, RefreshToken, Refresh_Token, Access_Token
 from .core.security import harsh_password, authenticate_user, create_token, hash_token, verify_token, check_limit
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
 from jwt import InvalidTokenError
 from pyrate_limiter import Rate, Duration
+import uuid
 
 
 
@@ -192,5 +193,27 @@ async def logout(request_data: Refresh_Token, session: SessionDp):
   session.commit()
 
   return "User logged out successfully"
+
+@router.post("/logout-all/")
+async def logout_all(request_data: Access_Token, session: SessionDp):
+  access_exception = HTTPException(
+    status_code=401,
+    detail = "Access denied"
+  )
+
+  try:
+    payload = verify_token(request_data.access_token)
+    if payload.get("type") != "access":
+      raise access_exception
+  except InvalidTokenError:
+    access_exception
+  
+  #delete all the refresh tokens associated with the user
+  session.exec(
+    delete(RefreshToken).where(RefreshToken.user_id == uuid.UUID(payload.get("sub")))
+  )
+  session.commit()
+
+  return "User logged out from all devices successfully"
 
 app.include_router(router)
