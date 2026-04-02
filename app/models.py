@@ -39,3 +39,6 @@ class Token(BaseModel):
 class Refresh_Token(BaseModel):
   refresh_token: str
 
+class Access_Token(BaseModel):
+  access_token: str
+
