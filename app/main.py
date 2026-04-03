@@ -179,7 +179,7 @@ async def logout(request_data: Refresh_Token, session: SessionDp):
     if payload.get("type") != "refresh":
       raise access_exception
   except InvalidTokenError:
-    access_exception
+    raise access_exception
   
   refresh_in_db = session.exec(
     select(RefreshToken).where(RefreshToken.hashed_token == hash_token(request_data.refresh_token))
@@ -206,7 +206,7 @@ async def logout_all(request_data: Access_Token, session: SessionDp):
     if payload.get("type") != "access":
       raise access_exception
   except InvalidTokenError:
-    access_exception
+    raise access_exception
   
   #delete all the refresh tokens associated with the user
   session.exec(
