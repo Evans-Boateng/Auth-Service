@@ -15,8 +15,6 @@ from jwt import InvalidTokenError
 from pyrate_limiter import Rate, Duration
 import uuid
 
-
-
 # @asynccontextmanager
 # async def lifespan(app: FastAPI):
 #   redis = await aioredis.from_url("redis://localhost:6379") # this runs before the application starts
@@ -107,15 +105,17 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], sess
   token = Token(access_token=access_token, refresh_token=refresh_token, token_type="Bearer", access_token_exiry=datetime.now() + access_token_expiry, refresh_token_expiry=datetime.now() + refresh_token_expiry)
   return token
 
-@router.post("/token/refresh/", response_model=Token, dependencies=[Depends(check_limit(Rate(20, Duration.HOUR * 1)))])
+@router.post("/token/refresh", response_model=Token, dependencies=[Depends(check_limit(Rate(20, Duration.HOUR * 1)))])
 async def refresh_token(request_data: Refresh_Token, session: SessionDp, response: Response):
   credentials_exception = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN,
     detail="Could not validate credentials"
   )
-
-  payload = verify_token(request_data.refresh_token)
-  if payload.get("type") != "refresh":
+  try:
+    payload = verify_token(request_data.refresh_token)
+    if payload.get("type") != "refresh":
+      raise credentials_exception
+  except InvalidTokenError:
     raise credentials_exception
 
   refresh_in_db = session.exec(
@@ -167,7 +167,7 @@ async def refresh_token(request_data: Refresh_Token, session: SessionDp, respons
 
   return token
 
-@router.post("/logout/", dependencies=[Depends(check_limit(Rate(5, Duration.MINUTE * 15)))])
+@router.post("/logout", dependencies=[Depends(check_limit(Rate(5, Duration.MINUTE * 15)))])
 async def logout(request_data: Refresh_Token, session: SessionDp):
   access_exception = HTTPException(
     status_code=401,
@@ -194,8 +194,12 @@ async def logout(request_data: Refresh_Token, session: SessionDp):
 
   return "User logged out successfully"
 
-@router.post("/logout-all/")
+@router.post("/logout-all")
 async def logout_all(request_data: Access_Token, session: SessionDp):
+  """
+  This endpoint basically logs users out from all their devices -
+  thus all refresh tokens are deleted from the db
+  """
   access_exception = HTTPException(
     status_code=401,
     detail = "Access denied"
