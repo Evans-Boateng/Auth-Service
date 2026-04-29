@@ -10,6 +10,7 @@ import hashlib
 import base64
 from fastapi_limiter.depends import RateLimiter
 from pyrate_limiter import Limiter, Rate
+import secrets
 
 load_dotenv()
 
@@ -23,6 +24,11 @@ PUBLIC_KEY = base64.b64decode(encoded_public_key)
 
 
 password_hash = PasswordHash.recommended()
+
+def generate_client_credentials():
+    client_id = secrets.token_hex(12)
+    client_secret = secrets.token_urlsafe(32)
+    return client_id,  client_secret
 
 def harsh_password(password):
     hashed_password = password_hash.hash(password)
