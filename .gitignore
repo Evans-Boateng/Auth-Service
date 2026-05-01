@@ -8,3 +8,8 @@ env/
 #standard python ignores
 __pycache__
 *.py[cod]
+
+workspace.py
+database.db
+private.pem
+public.pem
