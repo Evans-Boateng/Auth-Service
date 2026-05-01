@@ -4,6 +4,22 @@ from pydantic import EmailStr, BaseModel
 import uuid
 
 
+class Client(SQLModel, table=True):
+  id: str = Field(primary_key=True, unique=True)
+  hashed_secret: str
+  name: str = Field(unique=True)
+  roles: list["Role"] | None = Relationship(back_populates="client")
+
+class Role(SQLModel, table=True):
+  id: uuid.UUID | None = Field(default_factory=uuid.uuid4, unique=True, primary_key=True)
+  client_id: str = Field(foreign_key="client.id", ondelete="CASCADE")
+  client: Client = Relationship(back_populates="roles")
+  name: str = Field(index=True, unique=True)
+
+class User_Role(SQLModel, table=True):
+  user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", primary_key=True)
+  role_id: uuid.UUID = Field(foreign_key="role.id", ondelete="CASCADE")
+
 class RefreshToken(SQLModel, table=True):
   id: uuid.UUID | None = Field(default_factory=uuid.uuid4, unique=True, primary_key=True)
   hashed_token: str = Field(unique=True)
