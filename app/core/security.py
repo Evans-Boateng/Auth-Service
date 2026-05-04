@@ -86,6 +86,4 @@ def create_token(data: dict, expires_delta: datetime | None, type: str):
 def verify_token(token: str):
     return jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
 
-def check_limit(rate: Rate):
-  return RateLimiter(limiter=Limiter(rate))
      
