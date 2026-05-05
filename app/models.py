@@ -16,7 +16,7 @@ class Role(SQLModel, table=True):
   client: Client = Relationship(back_populates="roles")
   name: str = Field(index=True, unique=True)
 
-class User_Role(SQLModel, table=True):
+class UserRole(SQLModel, table=True):
   user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", primary_key=True)
   role_id: uuid.UUID = Field(foreign_key="role.id", ondelete="CASCADE")
 
