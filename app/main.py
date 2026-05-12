@@ -26,10 +26,6 @@ router = APIRouter(prefix="/auth")
 
 SessionDp = Annotated[Session, Depends(get_session)]
 
-# Rate(2, Duration.SECOND * 5)
-
-
-
 #testing
 @router.get("/test", status_code=200)
 async def test():
@@ -122,9 +118,9 @@ async def create_user(data: Annotated[UserCreate, Form()], session: SessionDp):
   session.refresh(user)
 
 @router.post("/token", response_model=Token, dependencies=[Depends(check_limit(Rate(5, Duration.MINUTE * 15)))])
-async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDp, response: Response):
+async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDp):
   credentials_exception = HTTPException(
-    status_code=status.HTTP_401_UNAUTHORIZED,
+    status_code=status.HTTP_400_BAD_REQUEST,
     detail="Invalid username or password"
   )
   user = authenticate_user(username=form_data.username, password=form_data.password, session=session)
