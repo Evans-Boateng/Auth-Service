@@ -71,24 +71,43 @@ async def create_new_role(name: str, client_id: str, session: SessionDp):
       status_code=status.HTTP_401_UNAUTHORIZED
     )
   
-  #check if role already exists
-  name_in_db = session.exec(
-    select(Role).where(Role.name == name)
-  ).first()
-  if name_in_db:
-    raise HTTPException(
-      detail="Cannot create multiple roles with the same name",
-      status_code=status.HTTP_400_BAD_REQUEST
+  try:
+    new_role = Role(
+      name = name,
+      client_id=client.id
     )
-
-  new_role = Role(
-    name = name,
-    client_id=client.id
-  )
+  except Exception as e:
+    raise HTTPException(
+      detail="Cannot create multiple roles with the same",
+      status_code= status.HTTP_400_BAD_REQUEST
+    )
   session.add(new_role)
   session.commit()
 
   return
+
+@router.post("/admin/clients/{client_id}/users/{user_id}/roles")
+async def assign_role(client_id: str, user_id: str, role_name: str, session: SessionDp):
+  unauthorized_exception = HTTPException(
+    status_code=status.HTTP_400_BAD_REQUEST,
+    detail="User does not exist"
+  )
+  #check if user exists
+  user = session.get(User, user_id)
+  if not user:
+    raise unauthorized_exception
+  
+  client = session.get(Client, client_id)
+  
+  role = session.exec(
+    select(Role).where(Role.name == role_name)
+  ).first()
+
+  if role not in client.roles:
+    raise unauthorized_exception
+
+  return
+
 
 @router.post("/register", status_code=status.HTTP_204_NO_CONTENT)
 async def create_user(data: Annotated[UserCreate, Form()], session: SessionDp):

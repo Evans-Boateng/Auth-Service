@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field, Relationship, UniqueConstraint
 from pydantic import EmailStr, BaseModel
 import uuid
 
@@ -11,14 +11,17 @@ class Client(SQLModel, table=True):
   roles: list["Role"] | None = Relationship(back_populates="client")
 
 class Role(SQLModel, table=True):
+  __table_args__ = (UniqueConstraint("client_id", "name"),)
+
   id: uuid.UUID | None = Field(default_factory=uuid.uuid4, unique=True, primary_key=True)
   client_id: str = Field(foreign_key="client.id", ondelete="CASCADE")
   client: Client = Relationship(back_populates="roles")
-  name: str = Field(index=True, unique=True)
+  name: str = Field(index=True)
+
 
 class UserRole(SQLModel, table=True):
   user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE", primary_key=True)
-  role_id: uuid.UUID = Field(foreign_key="role.id", ondelete="CASCADE")
+  role_id: uuid.UUID = Field(foreign_key="role.id", ondelete="CASCADE", primary_key=True)
 
 class RefreshToken(SQLModel, table=True):
   id: uuid.UUID | None = Field(default_factory=uuid.uuid4, unique=True, primary_key=True)
