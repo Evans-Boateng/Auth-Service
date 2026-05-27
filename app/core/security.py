@@ -2,6 +2,7 @@ from pwdlib import PasswordHash
 from fastapi import HTTPException
 from sqlmodel import select
 from datetime import datetime, timedelta
+from app.core.config import ALGORITHM, DUMMY_HASH, PRIVATE_KEY, PUBLIC_KEY
 from ..models import User
 import os
 import jwt
@@ -11,15 +12,6 @@ import base64
 from fastapi_limiter.depends import RateLimiter
 from pyrate_limiter import Limiter, Rate
 import secrets
-
-load_dotenv()
-
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("JWT_ALGORITHM")
-encoded_key = os.getenv("PRIVATE_KEY_B64")
-PRIVATE_KEY = base64.b64decode(encoded_key)
-encoded_public_key = os.getenv("PUBLIC_KEY_B64")
-PUBLIC_KEY = base64.b64decode(encoded_public_key)
 
 
 password_hash = PasswordHash.recommended()
@@ -47,10 +39,14 @@ def get_user(username, session):
 
 def authenticate_user(username: str, password: str, session):
     """
-    This function authenticates the user
+    This function authenticates the user by making sure the response time is the same
+    whether user is valid or not and thus to prevent timing attacks
     """
     user = get_user(username, session)
     if not user:
+       #here, were making sure that the endpoint takes the same time to respond, whether the user is valid or not
+       #and that kinda confuse attackers by preventing timing attacks that could be use identify which username they tried is an actual user
+       verify_password(plain_password=password, hashed_password=DUMMY_HASH)
        return False
     if not verify_password(plain_password=password, hashed_password=user.hashed_password):
         return False
