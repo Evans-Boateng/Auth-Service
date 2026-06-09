@@ -65,12 +65,17 @@ def create_token(data: dict, expires_delta: datetime | None, type: str):
     #here I'm adding expiration claim to the payload
     to_encode.update({"exp": expire})
 
+    headers = {
+        "kid": "auth-v1"
+    }
+
     #encode and sign the token here
     #I used RS256 because this is a distributed service
     encoded_jwt = jwt.encode(
         to_encode,
         PRIVATE_KEY,
-        ALGORITHM
+        ALGORITHM,
+        headers = headers
     )
     return encoded_jwt
 

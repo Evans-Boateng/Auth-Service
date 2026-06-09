@@ -10,7 +10,7 @@ from sqlmodel import delete, select
 
 from app.core.security import authenticate_user, create_token, harsh_password, hash_token, verify_token
 from app.dependencies import check_limit
-from app.main import SessionDp
+from app.dependencies import SessionDp
 from app.models import RefreshToken, User
 from app.schemas.user import Access_Token, Refresh_Token, Token, UserCreate
 
@@ -87,7 +87,7 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], sess
   return token
 
 @router.post("/token/refresh", response_model=Token, dependencies=[Depends(check_limit(Rate(20, Duration.HOUR * 1)))])
-async def refresh_token(request_data: Refresh_Token, session: SessionDp, response: Response):
+async def refresh_token(request_data: Refresh_Token, session: SessionDp):
   credentials_exception = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN,
     detail="Could not validate credentials"

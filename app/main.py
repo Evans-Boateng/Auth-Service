@@ -7,7 +7,7 @@ from typing import Annotated
 
 from app.schemas.client import ClientIn
 from .database import create_db_and_tables
-from .dependencies import SessionDp, get_session, check_limit
+from .dependencies import SessionDp, get_session, check_limit, verify_admin_token
 from .models import User, RefreshToken, Client, Role, UserRole
 from .schemas.user import UserCreate, Token, Refresh_Token, Access_Token
 from .core.security import harsh_password, authenticate_user, create_token, hash_token, verify_password, verify_token, generate_client_credentials
@@ -19,7 +19,7 @@ from pyrate_limiter import Rate, Duration
 import uuid
 from uuid import UUID
 from sqlalchemy.exc import IntegrityError
-from .routers import users
+from .routers import users, jwks
 
 # @asynccontextmanager
 # async def lifespan(app: FastAPI):
@@ -92,13 +92,13 @@ async def login_admin(request_data: ClientIn, session: SessionDp):
     return (Access_Token(access_token=access_token))
   
   raise HTTPException(
-    detail="Invalid grant type",
+    detail="Unsupported grant_type",
     status_code=status.HTTP_400_BAD_REQUEST
   )
     
 
 @router.post("/admin/clients/roles", status_code=status.HTTP_200_OK)
-async def create_new_role(name: str, client_id: str, session: SessionDp):
+async def create_new_role(name: str, client_id: str, session: SessionDp, token: Annotated[str, Depends(verify_admin_token)]):
 
   #check if client exists
   client = session.exec(
@@ -127,7 +127,7 @@ async def create_new_role(name: str, client_id: str, session: SessionDp):
   return {"role": new_role.name, "client": new_role.client_id}
 
 @router.delete("/admin/clients/{client_name}/delete")
-async def delete_client(client_name:str, session: SessionDp):
+async def delete_client(client_name:str, session: SessionDp, token: Annotated[str, Depends(verify_admin_token)]):
   session.exec(
     delete(Client).where(Client.name == client_name)
   )
@@ -136,7 +136,7 @@ async def delete_client(client_name:str, session: SessionDp):
   return {"message": "Client deleted"}
 
 @router.post("/admin/clients/{client_id}/users/{user_id}/roles")
-async def assign_role(client_id: str, user_id: UUID, roles: list[str], session: SessionDp):
+async def assign_role(client_id: str, user_id: UUID, roles: list[str], session: SessionDp, token: Annotated[str, Depends(verify_admin_token)]):
   unauthorized_exception = HTTPException(
     status_code=status.HTTP_400_BAD_REQUEST,
     detail="User does not exist"
@@ -184,3 +184,4 @@ async def assign_role(client_id: str, user_id: UUID, roles: list[str], session: 
 
 app.include_router(router)
 app.include_router(users.router)
+app.include_router(jwks.router)
