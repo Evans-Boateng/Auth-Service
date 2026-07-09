@@ -45,7 +45,7 @@ def verify_admin_token(credentials: Annotated[HTTPAuthorizationCredentials, Depe
   token = credentials.credentials
   try:
     payload = verify_token(token)
-    if payload.get("type") != "access":
+    if payload.get("type") != "access" and payload.get("role") != "master":
       raise credentials_exception
   except InvalidTokenError:
     raise credentials_exception
