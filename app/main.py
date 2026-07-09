@@ -9,7 +9,7 @@ from app.schemas.client import ClientIn
 from .database import create_db_and_tables
 from .dependencies import SessionDp, get_session, check_limit, verify_admin_token
 from .models import User, RefreshToken, Client, Role, UserRole
-from .schemas.user import UserCreate, Token, Refresh_Token, Access_Token
+from .schemas.user import PasswordReset, UserCreate, Token, Refresh_Token, Access_Token
 from .core.security import harsh_password, authenticate_user, create_token, hash_token, verify_password, verify_token, generate_client_credentials
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -179,6 +179,39 @@ async def assign_role(client_id: str, user_id: UUID, roles: list[str], session: 
       )
 
   return {"roles":roles, "client": client.roles }
+
+@router.put("/admin/clients/{client_id}/users/{user_id}/password-reset")
+async def reset_password(client_id: str, user_id: UUID, request_data: PasswordReset, session: SessionDp, token: Annotated[str, Depends(verify_admin_token)]):
+  credentails_exception = HTTPException(
+    detail="Invalid client",
+    status_code=status.HTTP_401_UNAUTHORIZED
+  )
+  if request_data.type != "password":
+    raise HTTPException(
+      detail= "Invalid request payload", 
+      status_code=status.HTTP_400_BAD_REQUEST
+    )
+  
+  client = session.exec(
+    select(Client).where(Client.id == client_id)
+  ).first()
+  if not client:
+    raise credentails_exception
+  
+  user = session.exec(
+    select(User).where(User.id == user_id)
+  ).first()
+  if not user:
+    raise HTTPException(
+      detail="User does not exist",
+      status_code= status.HTTP_400_BAD_REQUEST
+    )
+  new_password = harsh_password(request_data.value)
+  user.hashed_password = new_password
+
+  session.add(user)
+  session.commit()
+  return "User password reseted" 
 
 
 
