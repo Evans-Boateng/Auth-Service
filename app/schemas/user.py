@@ -27,3 +27,7 @@ class Refresh_Token(BaseModel):
 
 class Access_Token(BaseModel):
   access_token: str
+
+class PasswordReset(BaseModel):
+  type: str
+  value: str
