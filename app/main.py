@@ -5,6 +5,7 @@ from fastapi.responses import Response
 from sqlmodel import Session, select, delete
 from typing import Annotated
 
+from app.core.config import DUMMY_HASH
 from app.schemas.client import ClientIn
 from .database import create_db_and_tables
 from .dependencies import SessionDp, get_session, check_limit, verify_admin_token
@@ -71,6 +72,8 @@ async def login_admin(request_data: ClientIn, session: SessionDp):
     select(Client).where(Client.id == request_data.client_id)
   ).first()
   if not client:
+    #we're preventing timing attacks here
+    verify_password(plain_password=request_data.client_secret, hashed_password=DUMMY_HASH)
     raise credentails_exception
   
   if not verify_password(plain_password=request_data.client_secret, hashed_password=client.hashed_secret):
@@ -191,6 +194,8 @@ async def reset_password(client_id: str, user_id: UUID, request_data: PasswordRe
       detail= "Invalid request payload", 
       status_code=status.HTTP_400_BAD_REQUEST
     )
+  
+  #compare the client id in the url to the one in the one verified in the admin token
   
   client = session.exec(
     select(Client).where(Client.id == client_id)
