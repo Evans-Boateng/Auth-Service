@@ -11,7 +11,7 @@ from .database import create_db_and_tables
 from .dependencies import SessionDp, get_session, check_limit, verify_admin_token
 from .models import User, RefreshToken, Client, Role, UserRole
 from .schemas.user import PasswordReset, UserCreate, Token, Refresh_Token, Access_Token
-from .core.security import harsh_password, authenticate_user, create_token, hash_token, verify_password, verify_token, generate_client_credentials
+from .core.security import harsh_password, authenticate_user, create_token, hash_token, verify_client, verify_password, verify_token, generate_client_credentials
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -64,20 +64,24 @@ async def create_new_client(name: str, session: SessionDp):
 
 @router.post("/admin/clients/token", response_model=Access_Token, status_code=status.HTTP_200_OK)
 async def login_admin(request_data: ClientIn, session: SessionDp):
-  credentails_exception = HTTPException(
+  credentials_exception = HTTPException(
     detail="Invalid client",
     status_code=status.HTTP_401_UNAUTHORIZED
   )
-  client = session.exec(
-    select(Client).where(Client.id == request_data.client_id)
-  ).first()
-  if not client:
-    #we're preventing timing attacks here
-    verify_password(plain_password=request_data.client_secret, hashed_password=DUMMY_HASH)
-    raise credentails_exception
+  # client = session.exec(
+  #   select(Client).where(Client.id == request_data.client_id)
+  # ).first()
+  # if not client:
+  #   #we're preventing timing attacks here
+  #   verify_password(plain_password=request_data.client_secret, hashed_password=DUMMY_HASH)
+  #   raise credentails_exception
   
-  if not verify_password(plain_password=request_data.client_secret, hashed_password=client.hashed_secret):
-    raise credentails_exception
+  # if not verify_password(plain_password=request_data.client_secret, hashed_password=client.hashed_secret):
+  #   raise credentails_exception
+  
+  client = verify_client(request_data.client_id, request_data.client_secret, session)
+  if not client: 
+    raise credentials_exception
   
   if request_data.grant_type == "client_credentials":
     access_token_expiry = timedelta(minutes=1)
