@@ -3,7 +3,7 @@ from fastapi import HTTPException
 from sqlmodel import select
 from datetime import datetime, timedelta
 from app.core.config import ALGORITHM, DUMMY_HASH, PRIVATE_KEY, PUBLIC_KEY
-from ..models import User
+from ..models import Client, User
 import os
 import jwt
 from dotenv import load_dotenv
@@ -51,6 +51,17 @@ def authenticate_user(username: str, password: str, session):
     if not verify_password(plain_password=password, hashed_password=user.hashed_password):
         return False
     return user
+
+def verify_client(client_id: str, client_secret: str, session):
+    client = session.exec(
+        select(Client).where(Client.id == client_id)
+    ).first()
+    if not client:
+        verify_password(plain_password=client_secret, hashed_password = DUMMY_HASH)
+        return False
+    if not verify_password(plain_password=client_secret, hashed_password = client.hashed_secret):
+        return False
+    return client
 
 def create_token(data: dict, expires_delta: datetime | None, type: str):
     to_encode = data.copy()
