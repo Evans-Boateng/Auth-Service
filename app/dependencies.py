@@ -2,6 +2,8 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, status
 from jwt import InvalidTokenError
 from sqlmodel import Session, select, SQLModel
+
+from app.models import Client
 from .database import engine
 from .core.security import verify_token
 from pyrate_limiter import Limiter, Rate
@@ -36,7 +38,7 @@ def get_or_create(session, model: SQLModel, id: str) -> tuple:
     session.refresh(instance)
     return instance, True
   
-def verify_admin_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]):
+def verify_admin_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)], session):
   credentials_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
     detail="Invalid token",
@@ -50,6 +52,12 @@ def verify_admin_token(credentials: Annotated[HTTPAuthorizationCredentials, Depe
   except InvalidTokenError:
     raise credentials_exception
   
-  return token
+  client = session.exec(
+    select(Client).where(Client.id == payload.get("sub"))
+  )
+  if not client:
+    credentials_exception
+  
+  return client
 
   # return {"credentials": credentials.credentails, "scheme": credentials.scheme}
