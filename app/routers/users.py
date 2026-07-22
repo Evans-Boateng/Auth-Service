@@ -8,11 +8,11 @@ from jwt import InvalidTokenError
 from pyrate_limiter import Duration, Rate
 from sqlmodel import delete, select
 
-from app.core.security import authenticate_user, create_token, harsh_password, hash_token, verify_token
-from app.dependencies import check_limit
+from app.core.security import authenticate_user, create_token, harsh_password, hash_token, verify_client, verify_token
+from app.dependencies import check_limit, verify_admin_token
 from app.dependencies import SessionDp
 from app.models import RefreshToken, User
-from app.schemas.user import Access_Token, Refresh_Token, Token, UserCreate
+from app.schemas.user import Access_Token, Refresh_Data, Refresh_Token, Token, UserCreate
 
 router = APIRouter()
 
@@ -87,66 +87,80 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], sess
   return token
 
 @router.post("/token/refresh", response_model=Token, dependencies=[Depends(check_limit(Rate(20, Duration.HOUR * 1)))])
-async def refresh_token(request_data: Refresh_Token, session: SessionDp):
+async def refresh_token(request_data: Refresh_Data, session: SessionDp):
   credentials_exception = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN,
     detail="Could not validate credentials"
   )
-  try:
-    payload = verify_token(request_data.refresh_token)
-    if payload.get("type") != "refresh":
+
+  client = verify_client(request_data.client_id, request_data.client_secret, session)
+  if not client: 
+    raise HTTPException(
+      detail="Invalid client",
+      status_code=status.HTTP_401_UNAUTHORIZED
+    )
+  
+  if request_data.grant_type == "refresh_token":
+
+    try:
+      payload = verify_token(request_data.refresh_token)
+      if payload.get("type") != "refresh":
+        raise credentials_exception
+    except InvalidTokenError:
       raise credentials_exception
-  except InvalidTokenError:
-    raise credentials_exception
 
-  refresh_in_db = session.exec(
-    select(RefreshToken).where(RefreshToken.hashed_token == hash_token(request_data.refresh_token))
-  ).first()
+    refresh_in_db = session.exec(
+      select(RefreshToken).where(RefreshToken.hashed_token == hash_token(request_data.refresh_token))
+    ).first()
 
-  if not refresh_in_db or refresh_in_db.is_revoked:
-    raise credentials_exception
-  
-  #here we check if the user actually exists in the db
-  user = session.get(User, refresh_in_db.user_id)
-  if not user:
-    raise credentials_exception
-  
-  #create the new access token and refresh token and delete the old refresh token(refresh rotation)
-  access_token_expiry = timedelta(minutes=7)
-  refresh_token_expiry = timedelta(days=7)
+    if not refresh_in_db or refresh_in_db.is_revoked:
+      raise credentials_exception
+    
+    #here we check if the user actually exists in the db
+    user = session.get(User, refresh_in_db.user_id)
+    if not user:
+      raise credentials_exception
+    
+    #create the new access token and refresh token and delete the old refresh token(refresh rotation)
+    access_token_expiry = timedelta(minutes=7)
+    refresh_token_expiry = timedelta(days=7)
 
-  new_access_token = create_token(
-    data={
-      "sub": str(user.id),
-      "username": user.username,
-      "email": user.email,
-      "type": "access"
-    },
-    expires_delta= access_token_expiry,
-    type="access"
+    new_access_token = create_token(
+      data={
+        "sub": str(user.id),
+        "username": user.username,
+        "email": user.email,
+        "type": "access"
+      },
+      expires_delta= access_token_expiry,
+      type="access"
+    )
+    new_refresh_token = create_token(
+      data={
+        "sub": str(user.id),
+        "type": "refresh"
+      },
+      expires_delta= refresh_token_expiry,
+      type="refresh"
+    )
+    
+    session.delete(refresh_in_db)
+
+    new_stored_refresh_token = RefreshToken(
+      user_id=user.id,
+      hashed_token=hash_token(new_refresh_token),
+      expires_at = datetime.now() + refresh_token_expiry
+    )
+    session.add(new_stored_refresh_token)
+    session.commit()
+
+    token = Token(access_token=new_access_token, refresh_token=new_refresh_token, access_token_exiry= datetime.now() + access_token_expiry, refresh_token_expiry=datetime.now() + refresh_token_expiry, token_type="Bearer") 
+
+    return token
+  raise HTTPException(
+    detail="Unsupported grant_type",
+    status_code=status.HTTP_400_BAD_REQUEST
   )
-  new_refresh_token = create_token(
-    data={
-      "sub": str(user.id),
-      "type": "refresh"
-    },
-    expires_delta= refresh_token_expiry,
-    type="refresh"
-  )
-  
-  session.delete(refresh_in_db)
-
-  new_stored_refresh_token = RefreshToken(
-    user_id=user.id,
-    hashed_token=hash_token(new_refresh_token),
-    expires_at = datetime.now() + refresh_token_expiry
-  )
-  session.add(new_stored_refresh_token)
-  session.commit()
-
-  token = Token(access_token=new_access_token, refresh_token=new_refresh_token, access_token_exiry= datetime.now() + access_token_expiry, refresh_token_expiry=datetime.now() + refresh_token_expiry, token_type="Bearer") 
-
-  return token
 
 @router.post("/logout", dependencies=[Depends(check_limit(Rate(5, Duration.MINUTE * 15)))])
 async def logout(request_data: Refresh_Token, session: SessionDp):
@@ -200,3 +214,14 @@ async def logout_all(request_data: Access_Token, session: SessionDp):
   session.commit()
 
   return "User logged out from all devices successfully"
+
+@router.delete("/admin/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(user_id: str, session: SessionDp, token: Annotated[str, Depends(verify_admin_token)]):
+  user = session.get(User, user_id)
+  if not user:
+    raise HTTPException(
+      detail="User does not exist",
+      status_code= status.HTTP_400_BAD_REQUEST
+    )
+  
+  session.delete(user)
