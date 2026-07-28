@@ -12,12 +12,12 @@ from app.core.security import authenticate_user, create_token, harsh_password, h
 from app.dependencies import check_limit, verify_admin_token
 from app.dependencies import SessionDp
 from app.models import RefreshToken, User
-from app.schemas.user import Access_Token, Refresh_Data, Refresh_Token, Token, UserCreate
+from app.schemas.user import Access_Token, Logout_Data, Refresh_Data, Refresh_Token, Token, UserCreate
 
 router = APIRouter()
 
-@router.post("/register", status_code=status.HTTP_204_NO_CONTENT)
-async def create_user(data: Annotated[UserCreate, Form()], session: SessionDp):
+@router.post("/admin/users/register", status_code=status.HTTP_204_NO_CONTENT)
+async def create_user(data: Annotated[UserCreate, Form()], session: SessionDp, client: Annotated[str, Depends(verify_admin_token)]):
   credentails_exception = HTTPException(
     status_code = status.HTTP_400_BAD_REQUEST,
     detail= "Username or email already exists"
@@ -163,11 +163,18 @@ async def refresh_token(request_data: Refresh_Data, session: SessionDp):
   )
 
 @router.post("/logout", dependencies=[Depends(check_limit(Rate(5, Duration.MINUTE * 15)))])
-async def logout(request_data: Refresh_Token, session: SessionDp):
+async def logout(request_data: Logout_Data, session: SessionDp):
   access_exception = HTTPException(
     status_code=401,
     detail = "Access denied"
   )
+
+  client = verify_client(request_data.client_id, request_data.client_secret, session)
+  if not client:
+    raise HTTPException(
+      detail="Invalid client credentials",
+      status_code=status.HTTP_401_UNAUTHORIZED
+    )
 
   try:
     payload = verify_token(request_data.refresh_token)

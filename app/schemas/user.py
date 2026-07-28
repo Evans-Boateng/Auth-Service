@@ -25,6 +25,17 @@ class Token(BaseModel):
 class Refresh_Token(BaseModel):
   refresh_token: str
 
+class Logout_Data(BaseModel):
+  refresh_token: str
+  client_id: str
+  client_secret: str
+
+class Refresh_Data(BaseModel):
+  client_id: str
+  client_secret: str
+  refresh_token: str
+  grant_type: str
+
 class Access_Token(BaseModel):
   access_token: str
 
