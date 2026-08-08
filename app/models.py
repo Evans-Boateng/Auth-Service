@@ -38,7 +38,7 @@ class RefreshToken(SQLModel, table=True):
 class User(UserBase, table=True):
   id: uuid.UUID | None = Field(default_factory=uuid.uuid4, unique=True, primary_key=True)
   hashed_password: str
-  refresh_tokens: RefreshToken | None = Relationship(back_populates="user")
+  refresh_tokens: list[RefreshToken] | None = Relationship(back_populates="user")
   created_at: datetime | None = Field(default_factory=datetime.now)
   updated_at: datetime | None = Field(default_factory=datetime.now)
 
