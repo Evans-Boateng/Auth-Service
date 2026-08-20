@@ -38,7 +38,7 @@ def get_or_create(session, model: SQLModel, id: str) -> tuple:
     session.refresh(instance)
     return instance, True
   
-def verify_admin_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)], session):
+def verify_admin_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)], session: SessionDp):
   credentials_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
     detail="Invalid token",
