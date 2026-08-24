@@ -78,6 +78,7 @@ class UserSession(SQLModel, table=True):
   user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
   user: User = Relationship(back_populates="sessions")
   is_revoked: bool = False
+  expires_at: datetime
   created_at: datetime | None = Field(
     sa_column=Column(
       DateTime,
