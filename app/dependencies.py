@@ -3,7 +3,7 @@ from fastapi import Depends, HTTPException, status
 from jwt import InvalidTokenError
 from sqlmodel import Session, select, SQLModel
 
-from app.models import Client
+from app.models import Client, Organization
 from .database import engine
 from .core.security import verify_token
 from pyrate_limiter import Limiter, Rate
@@ -52,12 +52,10 @@ def verify_admin_token(credentials: Annotated[HTTPAuthorizationCredentials, Depe
   except InvalidTokenError:
     raise credentials_exception
   
-  client = session.exec(
-    select(Client).where(Client.id == payload.get("sub"))
+  organization = session.exec(
+    select(Organization).where(Organization.id == payload.get("sub"))
   )
-  if not client:
+  if not organization:
     credentials_exception
   
-  return client
-
-  # return {"credentials": credentials.credentails, "scheme": credentials.scheme}
+  return organization
