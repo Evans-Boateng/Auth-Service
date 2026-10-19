@@ -6,10 +6,10 @@ from sqlmodel import Session, select, delete
 from typing import Annotated
 
 from app.core.config import DUMMY_HASH
-from app.schemas.client import ClientIn
+from app.schemas.client import ClientIn, Org_Data, OrgIn
 from .database import create_db_and_tables
-from .dependencies import SessionDp, get_session, check_limit, verify_admin_token
-from .models import User, RefreshToken, Client, Role, UserRole
+from .dependencies import SessionDp, check_limit, verify_admin_token
+from .models import User, RefreshToken, Client, Role, UserRole, Organization
 from .schemas.user import PasswordReset, UserCreate, Token, Refresh_Token, Access_Token
 from .core.security import harsh_password, authenticate_user, create_token, hash_token, verify_client, verify_password, verify_token, generate_client_credentials
 from contextlib import asynccontextmanager
@@ -36,36 +36,33 @@ router = APIRouter(prefix="/auth")
 async def test():
   return {"message": "success"}
 
-@router.post("/admin/clients", status_code=200)
-async def create_new_client(name: str, session: SessionDp):
-  client_id, client_secret = generate_client_credentials()
-
+@router.post("/admin/organizations", status_code=status.HTTP_201_CREATED)
+async def create_organization(request_data: Org_Data, session: SessionDp):
   name_in_db = session.exec(
-    select(Client).where(Client.name == name )
+    select(Organization).where(Organization.name == request_data.name)
   ).first()
   if name_in_db:
-    raise HTTPException(
-      detail="Cannot create multiple clients with the same name",
+    raise HTTPException(            
+      detail="Cannot create multiple organizations with the same name",
       status_code=status.HTTP_400_BAD_REQUEST
     )
   
-  hashed_secret = harsh_password(client_secret)
-  
-  client = Client(
-    id = client_id,
-    hashed_secret = hashed_secret,
-    name = name
+  hashed_password = harsh_password(request_data.password)
+
+  organization = Organization(
+    name=request_data.name,
+    hashed_password=hashed_password
   )
-
-  session.add(client)
+  session.add(organization)
   session.commit()
+  session.refresh(organization)
 
-  return {"client_id": client_id, "client_secret": client_secret}
+  return {"organization_id": organization.id, "name": organization.name}
 
-@router.post("/admin/clients/token", response_model=Access_Token, status_code=status.HTTP_200_OK)
-async def login_admin(request_data: ClientIn, session: SessionDp):
+@router.post("/admin/organizations/token", response_model=Access_Token, status_code=status.HTTP_200_OK)
+async def login_admin(request_data: OrgIn, session: SessionDp):
   credentials_exception = HTTPException(
-    detail="Invalid client",
+    detail="Invalid organization",
     status_code=status.HTTP_401_UNAUTHORIZED
   )
   # client = session.exec(
@@ -79,17 +76,23 @@ async def login_admin(request_data: ClientIn, session: SessionDp):
   # if not verify_password(plain_password=request_data.client_secret, hashed_password=client.hashed_secret):
   #   raise credentails_exception
   
-  client = verify_client(request_data.client_id, request_data.client_secret, session)
-  if not client: 
+  # client = verify_client(request_data.client_id, request_data.client_secret, session)
+  org = session.exec(
+    select(Organization).where(Organization.name == request_data.name)
+  ).first()
+  if not org:
+    verify_password(plain_password=request_data.password, hashed_password=DUMMY_HASH) 
+    raise credentials_exception
+  if not verify_password(plain_password=request_data.password, hashed_password=org.hashed_password):
     raise credentials_exception
   
-  if request_data.grant_type == "client_credentials":
-    access_token_expiry = timedelta(minutes=1)
+  if request_data.grant_type == "password":
+    access_token_expiry = timedelta(minutes=5) #change to 1 minute
 
     access_token = create_token(
       data={
-        "sub": str(client.id),
-        "iss": client.name,
+        "sub": str(org.id),
+        "iss": org.name,
         "type": "access",
         "role": "master"
       },
@@ -101,11 +104,50 @@ async def login_admin(request_data: ClientIn, session: SessionDp):
   raise HTTPException(
     detail="Unsupported grant_type",
     status_code=status.HTTP_400_BAD_REQUEST
+  ) 
+
+
+@router.post("/admin/clients", status_code=status.HTTP_200_OK)
+async def create_new_client(data: ClientIn, session: SessionDp, org: Annotated[str, Depends(verify_admin_token)]):
+  client_id, client_secret = generate_client_credentials()
+
+  # credentials_exception = HTTPException(
+  #   status_code=status.HTTP_400_BAD_REQUEST,
+  #   detail="Invalid credentails"
+  # )
+
+  # org = session.exec(
+  #   select(Organization).where(Organization.name == data.org)
+  # ).first()
+  # if not org:
+  #   raise credentials_exception
+
+  name_in_db = session.exec(
+    select(Client).where(Client.name == data.name )
+  ).first()
+  if name_in_db:
+    raise HTTPException(
+      detail="Cannot create multiple clients with the same name",
+      status_code=status.HTTP_400_BAD_REQUEST
+    )
+  
+  hashed_secret = harsh_password(client_secret)
+  
+  client = Client(
+    id = client_id,
+    hashed_secret = hashed_secret,
+    name = data.name,
+    organization=org
   )
+
+  session.add(client)
+  session.commit()
+
+  return {"client_id": client_id, "client_secret": client_secret}
     
 
 @router.post("/admin/clients/roles", status_code=status.HTTP_200_OK)
-async def create_new_role(name: str, client_id: str, session: SessionDp, token: Annotated[str, Depends(verify_admin_token)]):
+async def create_new_role(name: str, client_id: str, token: Annotated[str, Depends(verify_admin_token)], session: SessionDp):
 
   #check if client exists
   client = session.exec(
